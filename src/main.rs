@@ -1,7 +1,7 @@
 //use std::io;
 //use std::thread;
 //use std::time::Duration;
-use std::net::UdpSocket;
+use std::{io::ErrorKind::QuotaExceeded, net::UdpSocket};
 
 fn main() -> std::io::Result<()> {
     {
@@ -44,14 +44,23 @@ fn main() -> std::io::Result<()> {
             println!("Query asked a question {}", i);
         }
         
+        let mut question: Vec<Vec<u8>>;
+        let mut next: usize;
+        (question, next) = parse_questions(buf, qdcount);
+        for label in question {
+            for symbol in label {
+                print!("{}", symbol as char);
+            }
 
+            print!(".");
+        }
 
         socket.send_to(buf, &src)?;
     }
     Ok(())
 }
 
-//we basically unroll pointers here
+//ADD ACTUAL PARSING OF FLAGS AND CHANGE RETURN TYPE TO CORRESPOND TO THE RECORD!!!!!!!!!
 fn parse_questions(source: &[u8], qdcount: u16, ) -> (Vec<Vec<u8>>, usize){ //end point
     //panic if not IN for QCLASS
     //panic if not A for QTYPE (maybe add AAAA support later)
@@ -95,7 +104,7 @@ fn parse_domain(source: &[u8], start: usize) -> (Vec<Vec<u8>>, usize){
         }
     }
     
-    (result, octet_index)
+    (result, octet_index + 1)
 }
 
 fn parse_label(source: &[u8], size_byte_start: usize) -> (Vec<u8>, usize) { //next index + label
@@ -104,7 +113,7 @@ fn parse_label(source: &[u8], size_byte_start: usize) -> (Vec<u8>, usize) { //ne
 
     let mut label: Vec<u8> = Vec::new();
 
-    while curr_byte < octets_count {
+    while curr_byte <= octets_count {
         let octet = source[size_byte_start + curr_byte];
 
         label.push(octet);
@@ -116,7 +125,11 @@ fn parse_label(source: &[u8], size_byte_start: usize) -> (Vec<u8>, usize) { //ne
 }
 
 fn parse_pointer(source: &[u8], size_byte_start: usize) -> (Vec<Vec<u8>>, usize) { //next index + labels
-    let octet_index = usize::from(source[size_byte_start] & 0b00_111111);
+    //let octet_index = usize::from(source[size_byte_start] & 0b00_111111);
+    let octet_index = usize::from(
+        u16::from_be_bytes([source[size_byte_start] & 0b00_111111, 
+                            source[size_byte_start + 1]])
+    );
     let next = size_byte_start + 2;
 
     let mut domain_part: Vec<Vec<u8>>;
