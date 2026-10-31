@@ -101,14 +101,85 @@ fn main() -> std::io::Result<()> {
                 panic!("request id doesnt match response id!");
             }
 
+            let message = parse_message(response);
 
+            if !message.answer.is_empty() && message.answer[0].r_type == 5 {
+                let new_domain: Vec<Vec<u8>>;
 
-            if cool {
+                match &message.answer[0].r_data {
+                    RData::Cname(domain) => new_domain = domain.clone(),
+                    _ => panic!("Expected CNAME data!")
+                }
+
+                let mut initial_message = parse_message(&request);
+                initial_message.question[0].domain = new_domain;
+
+                let message_built = build_message(&initial_message);
+
+                upstream_socket.send_to(&message_built, root_addr)?;
+                continue;
+            }
+
+            /*if message.answer.len() > 0 && message.answer[0].r_type == 2 {
+                let new_domain = (RData::Cname())message.answer[0].r_data;
+
+                let mut initial_message = parse_message(&request);
+                initial_message.question[0].domain = new_domain;
+
+                let message_built = build_message(&initial_message);
+
+                upstream_socket.send_to(&message_built.as_slice()[..&message_built.len()], root_addr);
+                
+                continue;
+            }*/
+
+            if message.answer.iter().any(|record| record.r_type == 1) {
                 response[0] = user_request[0];
                 response[1] = user_request[1];
 
-                socket.send_to(response, &src)?;
+                socket.send_to(response, src)?;
+                break;
             }
+
+            /*let ns_domain: Vec<Vec<u8>>;
+            let authority_data = message.authority[0].r_data;
+            match authority_data {
+                RData::Ns(dom) => ns_domain = dom,
+                _ => panic!("didnt expect to encounter non ns record in authority!")
+            };*/
+            let ns_domain: Vec<Vec<u8>>;
+            match &message.authority[0].r_data {
+                RData::Ns(domain) => ns_domain = domain.clone(),
+                _ => panic!("Expected NS record!")
+            }
+            
+            /*let additional_data: net::Ipv4Addr;
+            for additional_record in message.additional{
+                if let RData::A(s) = additional_record {
+                    if
+                }
+                else{
+                    continue;
+                }
+            }*/
+
+            let mut ns_ip: Option<Ipv4Addr> = None;
+
+            for additional_record in &message.additional {
+                if additional_record.name == ns_domain {
+                    if let RData::A(ip) = &additional_record.r_data {
+                        ns_ip = Some(*ip);
+                        break;
+                    }
+                }
+            }
+
+            let ns_ip = ns_ip.expect("No glue record found!");
+
+            let next_addr = SocketAddr::V4(SocketAddrV4::new(ns_ip, 53));
+
+            upstream_socket.send_to(&request[..user_request.len()], next_addr)?;
+
         }
 
     }
