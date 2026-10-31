@@ -120,19 +120,6 @@ fn main() -> std::io::Result<()> {
                 continue;
             }
 
-            /*if message.answer.len() > 0 && message.answer[0].r_type == 2 {
-                let new_domain = (RData::Cname())message.answer[0].r_data;
-
-                let mut initial_message = parse_message(&request);
-                initial_message.question[0].domain = new_domain;
-
-                let message_built = build_message(&initial_message);
-
-                upstream_socket.send_to(&message_built.as_slice()[..&message_built.len()], root_addr);
-                
-                continue;
-            }*/
-
             if message.answer.iter().any(|record| record.r_type == 1) {
                 response[0] = user_request[0];
                 response[1] = user_request[1];
@@ -141,27 +128,11 @@ fn main() -> std::io::Result<()> {
                 break;
             }
 
-            /*let ns_domain: Vec<Vec<u8>>;
-            let authority_data = message.authority[0].r_data;
-            match authority_data {
-                RData::Ns(dom) => ns_domain = dom,
-                _ => panic!("didnt expect to encounter non ns record in authority!")
-            };*/
             let ns_domain: Vec<Vec<u8>>;
             match &message.authority[0].r_data {
                 RData::Ns(domain) => ns_domain = domain.clone(),
                 _ => panic!("Expected NS record!")
             }
-            
-            /*let additional_data: net::Ipv4Addr;
-            for additional_record in message.additional{
-                if let RData::A(s) = additional_record {
-                    if
-                }
-                else{
-                    continue;
-                }
-            }*/
 
             let mut ns_ip: Option<Ipv4Addr> = None;
 
@@ -179,17 +150,13 @@ fn main() -> std::io::Result<()> {
             let next_addr = SocketAddr::V4(SocketAddrV4::new(ns_ip, 53));
 
             upstream_socket.send_to(&request[..user_request.len()], next_addr)?;
-
         }
 
     }
     Ok(())
 }
 
-//ADD ACTUAL PARSING OF FLAGS AND CHANGE RETURN TYPE TO CORRESPOND TO THE RECORD!!!!!!!!!
-fn parse_questions(source: &[u8], qdcount: u16, ) -> (Vec<Question>, usize){ //end point
-    //panic if not IN for QCLASS
-    //panic if not A for QTYPE (maybe add AAAA support later)
+fn parse_questions(source: &[u8], qdcount: u16, ) -> (Vec<Question>, usize){
     if qdcount > 1 {
         panic!("dont support multiquestion queries");
     }
@@ -243,7 +210,7 @@ fn parse_domain(source: &[u8], start: usize) -> (Vec<Vec<u8>>, usize){
     (result, octet_index + 1)
 }
 
-fn parse_label(source: &[u8], size_byte_start: usize) -> (Vec<u8>, usize) { //next index + label
+fn parse_label(source: &[u8], size_byte_start: usize) -> (Vec<u8>, usize) {
     let mut curr_byte: usize = 1;
     let octets_count = usize::from(source[size_byte_start] & 0b00_111111);
 
@@ -260,7 +227,7 @@ fn parse_label(source: &[u8], size_byte_start: usize) -> (Vec<u8>, usize) { //ne
     (label, size_byte_start + curr_byte)
 }
 
-fn parse_pointer(source: &[u8], size_byte_start: usize) -> (Vec<Vec<u8>>, usize) { //next index + labels
+fn parse_pointer(source: &[u8], size_byte_start: usize) -> (Vec<Vec<u8>>, usize) {
     let octet_index = usize::from(
         u16::from_be_bytes([source[size_byte_start] & 0b00_111111, 
                             source[size_byte_start + 1]])
@@ -356,11 +323,10 @@ fn parse_records(source: &[u8], count: u16, start: usize) -> (Vec<ResourceRecord
     (result, position)
 }
 
-//fn parse_response(source: &[u8], )
 fn parse_header(source: &[u8]) -> Header {
     let id = u16::from_be_bytes([source[0], source[1]]);
 
-    let qr = (source[2] >> 7) & 0b0000000_1;   //query if 0
+    let qr = (source[2] >> 7) & 0b0000000_1;
     let opcode = (source[2] >> 3) & 0b000_1111;
     let aa = (source[2] >> 2) & 0b0000000_1;
     let tc = (source[2] >> 1) & 0b0000000_1;
@@ -369,7 +335,7 @@ fn parse_header(source: &[u8]) -> Header {
     println!("qr: {} opcode: {} aa: {} tc: {} rd: {}", qr, opcode, aa, tc, rd);
 
     let ra = (source[3] >> 7) & 0b0000000_1;
-    let z = (source[3] >> 4) & 0b00000_111; //ignore
+    let z = (source[3] >> 4) & 0b00000_111;
     let rcode = source[3] & 0b0000_1111;
     println!("ra: {} z: {} rcode: {}", ra, z, rcode);
 
