@@ -65,50 +65,11 @@ fn main() -> std::io::Result<()> {
         println!("Received {} bytes from {}", amt, src);
 
         let user_request = &mut buf[..amt];
-
-
-        //HEADER PARSING START
-        let id = u16::from_be_bytes([user_request[0], user_request[1]]);
-
-        let qr = (user_request[2] >> 7) & 0b0000000_1;   //query if 0
-        let opcode = (user_request[2] >> 3) & 0b000_1111;
-        let aa = (user_request[2] >> 2) & 0b0000000_1;
-        let tc = (user_request[2] >> 1) & 0b0000000_1;
-        let rd = user_request[2] & 0b0000000_1;
-        println!("id of the requst: {}", id);
-        println!("qr: {} opcode: {} aa: {} tc: {} rd: {}", qr, opcode, aa, tc, rd);
-
-        let ra = (user_request[3] >> 7) & 0b0000000_1;
-        let z = (user_request[3] >> 4) & 0b00000_111; //ignore
-        let rcode = user_request[3] & 0b0000_1111;
-        println!("ra: {} z: {} rcode: {}", ra, z, rcode);
-
-        let qdcount = u16::from_be_bytes([user_request[4], user_request[5]]);
-        let ancount = u16::from_be_bytes([user_request[6], user_request[7]]);
-        let nscount = u16::from_be_bytes([user_request[8], user_request[9]]);
-        let arcount = u16::from_be_bytes([user_request[10], user_request[11]]);
-        println!("qdcount: {} ancount: {} nscount: {} arcount: {}"
-                    , qdcount, ancount, nscount, arcount);  
-        //HEADER PARSING END
-
-        for i in 0..qdcount {
-            println!("Query asked a question {}", i);
-        }
         
-        let mut question: Vec<Question>;
-        let mut next: usize;
-        (question, next) = parse_questions(user_request, qdcount);
-        
-        let answers_section: Vec<ResourceRecord>;
-        let authority_section: Vec<ResourceRecord>;
-        let additional_section: Vec<ResourceRecord>;
-        (answers_section, next) = parse_records(user_request, ancount, next);
-        (authority_section, next) = parse_records(user_request, nscount, next);
-        (additional_section, next) = parse_records(user_request, arcount, next);
-        
+        let initial_message = parse_message(user_request);
 
         //debug
-        for label in &question[0].domain {
+        for label in &initial_message.question[0].domain {
             for symbol in label {
                 print!("{}", *symbol as char);
             }
@@ -122,7 +83,7 @@ fn main() -> std::io::Result<()> {
         let mut request = [0u8; 512];
         request[..user_request.len()].copy_from_slice(user_request);
 
-        let new_id: u16 = rand::rng().random();
+        let mut new_id: u16 = rand::rng().random();
         request[0] = (new_id >> 8) as u8;
         request[1] = new_id as u8;
 
@@ -140,7 +101,7 @@ fn main() -> std::io::Result<()> {
                 panic!("request id doesnt match response id!");
             }
 
-
+            
 
             if cool {
                 response[0] = user_request[0];
