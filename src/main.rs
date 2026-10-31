@@ -1,7 +1,7 @@
 //use std::io;
 //use std::thread;
 //use std::time::Duration;
-use std::net::UdpSocket;
+use std::{net::UdpSocket, print};
 
 fn main() -> std::io::Result<()> {
     {
@@ -13,8 +13,19 @@ fn main() -> std::io::Result<()> {
         println!("Received {} bytes from {}", amt, src);
 
         let buf = &mut buf[..amt];
-        //let id = std::str::from_utf8(&buf[..2])?;
+
         let id = u16::from_be_bytes([buf[0], buf[1]]);
+
+        let qr = (buf[2] >> 7) & 0b0000000_1;   //query if 0
+        let opcode = (buf[2] >> 3) & 0b000_1111;
+        let aa = (buf[2] >> 2) & 0b0000000_1;
+        let tc = (buf[2] >> 1) & 0b0000000_1;
+        let rd = buf[2] & 0b0000000_1;
+        println!("id of the requst: {}", id);
+        println!("qr: {} opcode: {} aa: {} tc: {} rd: {}", qr, opcode, aa, tc, rd);
+
+
+
         //verify that its a query (later)
         //verify that its a standart query
         //aa, tc no check for query
@@ -32,13 +43,13 @@ fn main() -> std::io::Result<()> {
         //qclass only take IN
         //check out resource record and message compression
 
-        println!("id of the requst: {}", id);
         socket.send_to(buf, &src)?;
     }
     Ok(())
 }
 
-fn get_bits_slice(source: &u8, start: i32, end: i32) -> u8 {
+//big or small endian?
+fn get_bits_slice(source: u8, start: i32, end: i32) -> u8 {
     if !(0 <= start && start < end && end <= 7) {
         panic!("invalid bit positions!")
     }
@@ -48,5 +59,5 @@ fn get_bits_slice(source: &u8, start: i32, end: i32) -> u8 {
     mask = mask >> ( 7 - end);
     mask = mask << (7 - end);
 
-    source.clone() & mask
+    (source.clone() & mask) >> (7 - end)
 }
