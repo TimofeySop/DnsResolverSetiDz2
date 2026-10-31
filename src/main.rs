@@ -1,7 +1,31 @@
+use std::net;
 use std::net::UdpSocket;
 use std::net::Ipv4Addr;
 use std::net::{SocketAddr, SocketAddrV4};
 use rand::RngExt;
+
+struct Question{
+    domain: Vec<Vec<u8>>,
+    q_type: u16,
+    q_class: u16
+}
+
+struct ResourceRecord {
+    name: Vec<Vec<u8>>,
+    r_type: u16,
+    r_class: u16,
+    ttl: u32,
+    rd_ength: u16,
+    r_data: RData
+}
+
+enum RData{
+    Ns(Vec<Vec<u8>>),
+    Cname(Vec<Vec<u8>>),
+    A(net::Ipv4Addr),
+    AAAA(net::Ipv6Addr),
+    Other(Vec<u8>)
+}
 
 fn main() -> std::io::Result<()> {
     {
@@ -45,17 +69,21 @@ fn main() -> std::io::Result<()> {
             println!("Query asked a question {}", i);
         }
         
-        let mut question: Vec<Vec<u8>>;
+        let mut question: Vec<Question>;
         let mut next: usize;
         (question, next) = parse_questions(buf, qdcount);
-        for label in question {
+        
+
+        //debug
+        for label in &question[0].domain {
             for symbol in label {
-                print!("{}", symbol as char);
+                print!("{}", *symbol as char);
             }
 
             print!(".");
         }
 
+        //basically debug too
         let upstream_socket = UdpSocket::bind("0.0.0.0:0")?;
 
         let mut request = [0u8; 512];
@@ -86,7 +114,7 @@ fn main() -> std::io::Result<()> {
 }
 
 //ADD ACTUAL PARSING OF FLAGS AND CHANGE RETURN TYPE TO CORRESPOND TO THE RECORD!!!!!!!!!
-fn parse_questions(source: &[u8], qdcount: u16, ) -> (Vec<Vec<u8>>, usize){ //end point
+fn parse_questions(source: &[u8], qdcount: u16, ) -> (Vec<Question>, usize){ //end point
     //panic if not IN for QCLASS
     //panic if not A for QTYPE (maybe add AAAA support later)
     if qdcount > 1 {
@@ -95,13 +123,24 @@ fn parse_questions(source: &[u8], qdcount: u16, ) -> (Vec<Vec<u8>>, usize){ //en
 
     let mut oct_index: usize = 12;
 
-    let mut result: Vec<Vec<u8>> = Vec::new();
+    let mut result: Vec<Question> = Vec::new();
 
     for i in 0..qdcount {
         let domain: Vec<Vec<u8>>;
         (domain, oct_index) = parse_domain(source, oct_index);
 
-        result = domain;
+        let questionType = u16::from_be_bytes([source[oct_index], source[oct_index + 1]]);
+        let questionClass = u16::from_be_bytes([source[oct_index + 2], source[oct_index + 3]]);
+        oct_index += 4;
+
+        //result = domain;
+        let question = Question{
+            domain: domain,
+            q_type: questionType,
+            q_class: questionClass
+        };
+
+        result.push(question);
     }
 
     (result, oct_index)
