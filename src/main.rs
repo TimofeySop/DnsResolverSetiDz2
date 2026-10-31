@@ -120,7 +120,13 @@ fn main() -> std::io::Result<()> {
                 continue;
             }
 
-            if message.answer.iter().any(|record| record.r_type == 1) {
+            let question = &initial_message.question[0];
+
+            if message.answer.iter().any(|record| {
+                record.r_type == question.q_type
+                    && record.r_class == question.q_class
+                    && record.name == question.domain
+            }) {
                 response[0] = user_request[0];
                 response[1] = user_request[1];
 
