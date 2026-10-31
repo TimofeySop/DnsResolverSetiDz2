@@ -113,7 +113,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>>
         
         let initial_message = parse_message(user_request);
 
-        //debug
+        // For debug
         for label in &initial_message.question[0].domain {
             for symbol in label {
                 print!("{}", *symbol as char);
@@ -200,7 +200,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>>
             upstream_socket.send_to(&request[..user_request.len()], next_addr)?;
         }
     }
-    //Ok(())
 }
 
 fn parse_questions(source: &[u8], qdcount: u16, ) -> (Vec<Question>, usize){
@@ -220,7 +219,6 @@ fn parse_questions(source: &[u8], qdcount: u16, ) -> (Vec<Question>, usize){
         let questionClass = u16::from_be_bytes([source[oct_index + 2], source[oct_index + 3]]);
         oct_index += 4;
 
-        //result = domain;
         let question = Question{
             domain: domain,
             q_type: questionType,
@@ -319,7 +317,6 @@ fn parse_record(source: &[u8], start: usize) -> (ResourceRecord, usize){
         },
         2 => { //ns
             let domain: Vec<Vec<u8>>;
-            //(domain, position) = parse_domain(source, position);
             let rdata_start = position;
             (domain, position) = parse_domain(source, position);
 
@@ -331,7 +328,6 @@ fn parse_record(source: &[u8], start: usize) -> (ResourceRecord, usize){
         },
         5 => { //cname
             let domain: Vec<Vec<u8>>;
-            //(domain, position) = parse_domain(source, position);
             let rdata_start = position;
             (domain, position) = parse_domain(source, position);
 
