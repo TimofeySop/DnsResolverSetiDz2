@@ -282,16 +282,3 @@ fn parse_ns(source: &[u8], nscount: u16){
 fn parse_additional(source: &[u8], arcount: u16){
 
 }
-
-fn get_bits_slice(source: u8, start: i32, end: i32) -> u8 {
-    if !(0 <= start && start < end && end <= 7) {
-        panic!("invalid bit positions!")
-    }
-    let mut mask: u8 = 255;
-    mask = mask << start;
-    mask = mask >> start;
-    mask = mask >> ( 7 - end);
-    mask = mask << (7 - end);
-
-    (source.clone() & mask) >> (7 - end)
-}
