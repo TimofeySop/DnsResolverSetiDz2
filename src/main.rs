@@ -98,7 +98,7 @@ fn main() -> std::io::Result<()> {
             let (amt1, src1) = upstream_socket.recv_from(&mut response)?;
             let response = &mut response[..amt1];
             if response[0] != request[0] || response[1] != request[1]{
-                panic!("request id doesnt match response id!");
+                panic!("Request id doesnt match response id!");
             }
 
             let message = parse_message(response);
@@ -158,7 +158,7 @@ fn main() -> std::io::Result<()> {
 
 fn parse_questions(source: &[u8], qdcount: u16, ) -> (Vec<Question>, usize){
     if qdcount > 1 {
-        panic!("dont support multiquestion queries");
+        panic!("Don't support multiquestion queries");
     }
 
     let mut oct_index: usize = 12;
@@ -272,12 +272,26 @@ fn parse_record(source: &[u8], start: usize) -> (ResourceRecord, usize){
         },
         2 => { //ns
             let domain: Vec<Vec<u8>>;
+            //(domain, position) = parse_domain(source, position);
+            let rdata_start = position;
             (domain, position) = parse_domain(source, position);
+
+            if position - rdata_start != record_rd_length as usize {
+                panic!("Invalid NS RDATA length!");
+            }
+
             record_data = RData::Ns(domain)
         },
         5 => { //cname
             let domain: Vec<Vec<u8>>;
+            //(domain, position) = parse_domain(source, position);
+            let rdata_start = position;
             (domain, position) = parse_domain(source, position);
+
+            if position - rdata_start != record_rd_length as usize {
+                panic!("Invalid CNAME RDATA length!");
+            }
+
             record_data = RData::Cname(domain)
         },
         28 => { //AAAA
