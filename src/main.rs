@@ -53,11 +53,14 @@ enum RData{
     Other(Vec<u8>)
 }
 
-fn main() -> std::io::Result<()> {
-    {
+fn main() -> Result<(), Box<dyn std::error::Error>>
+{
+    let socket = UdpSocket::bind("127.0.0.1:5300")?;
+    let upstream_socket = UdpSocket::bind("0.0.0.0:0")?;
+
+    loop{
         let root = Ipv4Addr::new(192, 58, 128, 30);
 
-        let socket = UdpSocket::bind("127.0.0.1:5300")?;
         println!("Listening on 127.0.0.1:5300");
 
         let mut buf = [0u8; 1024];
@@ -65,6 +68,48 @@ fn main() -> std::io::Result<()> {
         println!("Received {} bytes from {}", amt, src);
 
         let user_request = &mut buf[..amt];
+
+        let mut message = parse_message(user_request);
+
+        if let Some(question) = message.question.first() {
+            if let Some(pos) = question.domain.iter().position(|label| {
+                label.eq_ignore_ascii_case(b"multiply")
+            }) {
+                let product = question.domain[..pos]
+                    .iter()
+                    .filter_map(|label| std::str::from_utf8(label).ok()?.parse::<u32>().ok())
+                    .fold(1u32, |acc, n| acc.wrapping_mul(n));
+
+                if question.q_type == 1 && question.q_class == 1 {
+                    message.answer.clear();
+                    message.authority.clear();
+                    message.additional.clear();
+
+                    message.answer.push(ResourceRecord {
+                        name: question.domain.clone(),
+                        r_type: 1,
+                        r_class: 1,
+                        ttl: 60,
+                        rd_length: 4,
+                        r_data: RData::A(Ipv4Addr::new(
+                            127,
+                            0,
+                            0,
+                            (product % 256) as u8,
+                        )),
+                    });
+
+                    message.header.qr = 1;
+                    message.header.aa = 1;
+                    message.header.ra = 0;
+                    message.header.rcode = 0;
+
+                    let response = build_message(&message);
+                    socket.send_to(&response, src)?;
+                    continue;
+                }
+            }
+        }
         
         let initial_message = parse_message(user_request);
 
@@ -76,9 +121,6 @@ fn main() -> std::io::Result<()> {
 
             print!(".");
         }
-
-        //basically debug too
-        let upstream_socket = UdpSocket::bind("0.0.0.0:0")?;
 
         let mut request = [0u8; 512];
         request[..user_request.len()].copy_from_slice(user_request);
@@ -157,9 +199,8 @@ fn main() -> std::io::Result<()> {
 
             upstream_socket.send_to(&request[..user_request.len()], next_addr)?;
         }
-
     }
-    Ok(())
+    //Ok(())
 }
 
 fn parse_questions(source: &[u8], qdcount: u16, ) -> (Vec<Question>, usize){
