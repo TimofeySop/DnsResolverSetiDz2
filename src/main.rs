@@ -6,6 +6,30 @@ use std::net::Ipv6Addr;
 use std::net::{SocketAddr, SocketAddrV4};
 use rand::RngExt;
 
+struct Message{
+    header: Header,
+    question: Vec<Question>,
+    answer: Vec<ResourceRecord>,
+    authority: Vec<ResourceRecord>,
+    additional: Vec<ResourceRecord>
+}
+
+struct Header{
+    id: u16,
+    qr: u8,
+    opcode: u8,
+    aa: u8,
+    tc: u8,
+    rd: u8, 
+    ra: u8,
+    z: u8,
+    rcode: u8,
+    qcount: u16,
+    ancount: u16,
+    nscount: u16,
+    arcount: u16
+}
+
 struct Question{
     domain: Vec<Vec<u8>>,
     q_type: u16,
@@ -40,29 +64,29 @@ fn main() -> std::io::Result<()> {
         let (amt, src) = socket.recv_from(&mut buf)?;
         println!("Received {} bytes from {}", amt, src);
 
-        let buf = &mut buf[..amt];
+        let user_request = &mut buf[..amt];
 
 
         //HEADER PARSING START
-        let id = u16::from_be_bytes([buf[0], buf[1]]);
+        let id = u16::from_be_bytes([user_request[0], user_request[1]]);
 
-        let qr = (buf[2] >> 7) & 0b0000000_1;   //query if 0
-        let opcode = (buf[2] >> 3) & 0b000_1111;
-        let aa = (buf[2] >> 2) & 0b0000000_1;
-        let tc = (buf[2] >> 1) & 0b0000000_1;
-        let rd = buf[2] & 0b0000000_1;
+        let qr = (user_request[2] >> 7) & 0b0000000_1;   //query if 0
+        let opcode = (user_request[2] >> 3) & 0b000_1111;
+        let aa = (user_request[2] >> 2) & 0b0000000_1;
+        let tc = (user_request[2] >> 1) & 0b0000000_1;
+        let rd = user_request[2] & 0b0000000_1;
         println!("id of the requst: {}", id);
         println!("qr: {} opcode: {} aa: {} tc: {} rd: {}", qr, opcode, aa, tc, rd);
 
-        let ra = (buf[3] >> 7) & 0b0000000_1;
-        let z = (buf[3] >> 4) & 0b00000_111; //ignore
-        let rcode = buf[3] & 0b0000_1111;
+        let ra = (user_request[3] >> 7) & 0b0000000_1;
+        let z = (user_request[3] >> 4) & 0b00000_111; //ignore
+        let rcode = user_request[3] & 0b0000_1111;
         println!("ra: {} z: {} rcode: {}", ra, z, rcode);
 
-        let qdcount = u16::from_be_bytes([buf[4], buf[5]]);
-        let ancount = u16::from_be_bytes([buf[6], buf[7]]);
-        let nscount = u16::from_be_bytes([buf[8], buf[9]]);
-        let arcount = u16::from_be_bytes([buf[10], buf[11]]);
+        let qdcount = u16::from_be_bytes([user_request[4], user_request[5]]);
+        let ancount = u16::from_be_bytes([user_request[6], user_request[7]]);
+        let nscount = u16::from_be_bytes([user_request[8], user_request[9]]);
+        let arcount = u16::from_be_bytes([user_request[10], user_request[11]]);
         println!("qdcount: {} ancount: {} nscount: {} arcount: {}"
                     , qdcount, ancount, nscount, arcount);  
         //HEADER PARSING END
@@ -73,7 +97,14 @@ fn main() -> std::io::Result<()> {
         
         let mut question: Vec<Question>;
         let mut next: usize;
-        (question, next) = parse_questions(buf, qdcount);
+        (question, next) = parse_questions(user_request, qdcount);
+        
+        let answers_section: Vec<ResourceRecord>;
+        let authority_section: Vec<ResourceRecord>;
+        let additional_section: Vec<ResourceRecord>;
+        (answers_section, next) = parse_records(user_request, ancount, next);
+        (authority_section, next) = parse_records(user_request, nscount, next);
+        (additional_section, next) = parse_records(user_request, arcount, next);
         
 
         //debug
@@ -89,7 +120,7 @@ fn main() -> std::io::Result<()> {
         let upstream_socket = UdpSocket::bind("0.0.0.0:0")?;
 
         let mut request = [0u8; 512];
-        request[..buf.len()].copy_from_slice(buf);
+        request[..user_request.len()].copy_from_slice(user_request);
 
         let new_id: u16 = rand::rng().random();
         request[0] = (new_id >> 8) as u8;
@@ -98,19 +129,27 @@ fn main() -> std::io::Result<()> {
         request[2] &= !0b00000001;
 
         let root_addr = SocketAddr::V4(SocketAddrV4::new(root, 53));
-        upstream_socket.send_to(&request[..buf.len()], root_addr)?;
+        upstream_socket.send_to(&request[..user_request.len()], root_addr)?;
 
-        let mut response = [0u8; 1024];
-        let (amt1, src1) = upstream_socket.recv_from(&mut response)?;
-        let response = &mut response[..amt1];
-        if response[0] != request[0] || response[1] != request[1]{
-            panic!("request id doesnt match response id!");
+
+        loop{
+            let mut response = [0u8; 1024];
+            let (amt1, src1) = upstream_socket.recv_from(&mut response)?;
+            let response = &mut response[..amt1];
+            if response[0] != request[0] || response[1] != request[1]{
+                panic!("request id doesnt match response id!");
+            }
+
+
+
+            if cool {
+                response[0] = user_request[0];
+                response[1] = user_request[1];
+
+                socket.send_to(response, &src)?;
+            }
         }
 
-        response[0] = buf[0];
-        response[1] = buf[1];
-
-        socket.send_to(response, &src)?;
     }
     Ok(())
 }
@@ -158,9 +197,8 @@ fn parse_domain(source: &[u8], start: usize) -> (Vec<Vec<u8>>, usize){
         if (octet & 0b11_000000) == 0b11_000000 {
             let mut domain_part: Vec<Vec<u8>>;
             (domain_part, octet_index) = parse_pointer(source, octet_index);
-            for label in domain_part{
-                result.push(label);
-            }
+            result.extend(domain_part);
+            return (result, octet_index);
         } else if (octet & 0b11_000000) == 0 {
             let mut label: Vec<u8>;
             (label, octet_index) = parse_label(source, octet_index);
@@ -271,14 +309,58 @@ fn parse_record(source: &[u8], start: usize) -> (ResourceRecord, usize){
     (result, position)
 }
 
-fn parse_answers(source: &[u8], ancount: u16){
+fn parse_records(source: &[u8], count: u16, start: usize) -> (Vec<ResourceRecord>, usize) {
+    let mut position = start;
 
+    let mut result: Vec<ResourceRecord> = Vec::new();
+
+    for i in 0..count {
+        let record: ResourceRecord;
+        (record, position) = parse_record(source, position);
+
+        result.push(record);
+    }
+
+    (result, position)
 }
 
-fn parse_ns(source: &[u8], nscount: u16){
+//fn parse_response(source: &[u8], )
+fn parse_header(source: &[u8]) -> Header {
+    let id = u16::from_be_bytes([source[0], source[1]]);
 
+    let qr = (source[2] >> 7) & 0b0000000_1;   //query if 0
+    let opcode = (source[2] >> 3) & 0b000_1111;
+    let aa = (source[2] >> 2) & 0b0000000_1;
+    let tc = (source[2] >> 1) & 0b0000000_1;
+    let rd = source[2] & 0b0000000_1;
+    println!("id of the requst: {}", id);
+    println!("qr: {} opcode: {} aa: {} tc: {} rd: {}", qr, opcode, aa, tc, rd);
+
+    let ra = (source[3] >> 7) & 0b0000000_1;
+    let z = (source[3] >> 4) & 0b00000_111; //ignore
+    let rcode = source[3] & 0b0000_1111;
+    println!("ra: {} z: {} rcode: {}", ra, z, rcode);
+
+    let qdcount = u16::from_be_bytes([source[4], source[5]]);
+    let ancount = u16::from_be_bytes([source[6], source[7]]);
+    let nscount = u16::from_be_bytes([source[8], source[9]]);
+    let arcount = u16::from_be_bytes([source[10], source[11]]);
+
+    return Header { id, qr, opcode, aa, tc, rd, ra, z, 
+                    rcode, qcount: qdcount, ancount, nscount, arcount };
 }
 
-fn parse_additional(source: &[u8], arcount: u16){
+fn parse_message(source: &[u8]) -> Message{
+    let header = parse_header(source);
+    let question: Vec<Question>;
+    let answer: Vec<ResourceRecord>;
+    let authority: Vec<ResourceRecord>;
+    let additional: Vec<ResourceRecord>;
+    let mut position: usize;
+    (question, position) = parse_questions(source, header.qcount);
+    (answer, position) = parse_records(source, header.ancount, position);
+    (authority, position) = parse_records(source, header.nscount, position);
+    (additional, position) = parse_records(source, header.arcount, position);
 
+    return Message { header, question, answer, authority, additional }
 }
