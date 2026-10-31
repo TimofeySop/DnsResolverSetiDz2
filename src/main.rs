@@ -1,7 +1,7 @@
 //use std::io;
 //use std::thread;
 //use std::time::Duration;
-use std::{net::UdpSocket, print};
+use std::net::UdpSocket;
 
 fn main() -> std::io::Result<()> {
     {
@@ -34,7 +34,7 @@ fn main() -> std::io::Result<()> {
         let nscount = u16::from_be_bytes([buf[8], buf[9]]);
         let arcount = u16::from_be_bytes([buf[10], buf[11]]);
         println!("qdcount: {} ancount: {} nscount: {} arcount: {}"
-                    , qdcount, ancount, nscount, arcount);
+                    , qdcount, ancount, nscount, arcount);  
 
         //verify that its a query (later)
         //verify that its a standart query
@@ -52,6 +52,21 @@ fn main() -> std::io::Result<()> {
         //qtype????????????????????????????????????????????????????????
         //qclass only take IN
         //check out resource record and message compression
+
+        //where labels are used: name in resource record, 
+
+
+
+        //write label parser
+        //write label pointer parser. PASS THE WHOLE RECORD
+
+        //question parser function goes here
+
+        //rr parsing goes here
+        //answer
+        //nscount resource record
+        //additional data
+
 
         socket.send_to(buf, &src)?;
     }
