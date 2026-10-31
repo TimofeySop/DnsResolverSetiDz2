@@ -101,7 +101,7 @@ fn main() -> std::io::Result<()> {
                 panic!("request id doesnt match response id!");
             }
 
-            
+
 
             if cool {
                 response[0] = user_request[0];
@@ -324,4 +324,80 @@ fn parse_message(source: &[u8]) -> Message{
     (additional, position) = parse_records(source, header.arcount, position);
 
     return Message { header, question, answer, authority, additional }
+}
+
+fn build_message(message: &Message) -> Vec<u8> {
+    let mut result: Vec<u8> = Vec::new();
+    result.extend_from_slice(&message.header.id.to_be_bytes());
+
+    let flags1 =
+        (message.header.qr << 7) |
+        (message.header.opcode << 3) |
+        (message.header.aa << 2) |
+        (message.header.tc << 1) |
+        message.header.rd;
+
+    let flags2 =
+        (message.header.ra << 7) |
+        (message.header.z << 4) |
+        message.header.rcode;
+
+    result.push(flags1);
+    result.push(flags2);
+
+    result.extend_from_slice(&message.question.len().to_be_bytes());
+    result.extend_from_slice(&message.answer.len().to_be_bytes());
+    result.extend_from_slice(&message.authority.len().to_be_bytes());
+    result.extend_from_slice(&message.additional.len().to_be_bytes());
+
+    for question in &message.question {
+        write_domain(&mut result, &question.domain);
+        result.extend_from_slice(&question.q_type.to_be_bytes());
+        result.extend_from_slice(&question.q_class.to_be_bytes());
+    }
+
+    for record in &message.answer {
+        write_record(&mut result, record);
+    }
+
+    for record in &message.authority {
+        write_record(&mut result, record);
+    }
+
+    for record in &message.additional {
+        write_record(&mut result, record);
+    }
+
+    result
+}
+
+fn write_domain(result: &mut Vec<u8>, domain: &Vec<Vec<u8>>) {
+    for label in domain {
+        result.push(label.len() as u8);
+        result.extend_from_slice(label);
+    }
+
+    result.push(0);
+}
+
+fn write_record(result: &mut Vec<u8>, record: &ResourceRecord) {
+    write_domain(result, &record.name);
+
+    result.extend_from_slice(&record.r_type.to_be_bytes());
+    result.extend_from_slice(&record.r_class.to_be_bytes());
+    result.extend_from_slice(&record.ttl.to_be_bytes());
+
+    let mut rdata: Vec<u8> = Vec::new();
+
+    match &record.r_data {
+        RData::A(ip) => rdata.extend_from_slice(&ip.octets()),
+        RData::AAAA(ip) => rdata.extend_from_slice(&ip.octets()),
+        RData::Ns(domain) | RData::Cname(domain) => {
+            write_domain(&mut rdata, domain);
+        },
+        RData::Other(data) => rdata.extend_from_slice(data),
+    }
+
+    result.extend_from_slice(&(rdata.len() as u16).to_be_bytes());
+    result.extend_from_slice(&rdata);
 }
