@@ -1,6 +1,8 @@
+use core::panic;
 use std::net;
 use std::net::UdpSocket;
 use std::net::Ipv4Addr;
+use std::net::Ipv6Addr;
 use std::net::{SocketAddr, SocketAddrV4};
 use rand::RngExt;
 
@@ -15,7 +17,7 @@ struct ResourceRecord {
     r_type: u16,
     r_class: u16,
     ttl: u32,
-    rd_ength: u16,
+    rd_length: u16,
     r_data: RData
 }
 
@@ -200,6 +202,73 @@ fn parse_pointer(source: &[u8], size_byte_start: usize) -> (Vec<Vec<u8>>, usize)
     (domain_part, _) = parse_domain(source, octet_index);
 
     (domain_part, next)
+}
+
+fn parse_record(source: &[u8], start: usize) -> (ResourceRecord, usize){
+    let mut position: usize = start;
+
+    let name: Vec<Vec<u8>>;
+    (name, position) = parse_domain(source, position);
+
+    let record_type = u16::from_be_bytes([source[position], source[position + 1]]);
+    let record_class = u16::from_be_bytes([source[position + 2], source[position + 3]]);
+    let record_ttl = u32::from_be_bytes([source[position + 4], source[position + 5], 
+                                            source[position + 6], source[position + 7]]);
+    let record_rd_length = u16::from_be_bytes([source[position + 8], source[position + 9]]);
+    position += 10;
+
+    let mut record_data: RData;
+
+    match record_type {
+        1 => { //A
+            if record_rd_length != 4 {
+                panic!("Invalid A record length!");
+            }
+
+            let octets: [u8; 4] = source[position..position + 4]
+                .try_into()
+                .unwrap();
+
+            record_data = RData::A(Ipv4Addr::from(octets));
+
+            position += 4;
+        },
+        2 => { //ns
+            let domain: Vec<Vec<u8>>;
+            (domain, position) = parse_domain(source, position);
+            record_data = RData::Ns(domain)
+        },
+        5 => { //cname
+            let domain: Vec<Vec<u8>>;
+            (domain, position) = parse_domain(source, position);
+            record_data = RData::Cname(domain)
+        },
+        28 => { //AAAA
+            if record_rd_length != 16 {
+                panic!("Invalid A record length!");
+            }
+
+            let octets: [u8; 16] = source[position..position + 16]
+                .try_into()
+                .unwrap();
+
+            record_data = RData::AAAA(Ipv6Addr::from(octets));
+
+            position += 16;
+        }
+        _ => panic!("Unexpected record type!"),
+    }
+
+    let result = ResourceRecord{
+        name: name,
+        r_type: record_type,
+        r_class: record_class,
+        ttl: record_ttl,
+        rd_length: record_rd_length,
+        r_data: record_data
+    };
+
+    (result, position)
 }
 
 fn parse_answers(source: &[u8], ancount: u16){
