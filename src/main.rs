@@ -24,7 +24,17 @@ fn main() -> std::io::Result<()> {
         println!("id of the requst: {}", id);
         println!("qr: {} opcode: {} aa: {} tc: {} rd: {}", qr, opcode, aa, tc, rd);
 
+        let ra = (buf[3] >> 7) & 0b0000000_1;
+        let z = (buf[3] >> 4) & 0b00000_111; //ignore
+        let rcode = buf[3] & 0b0000_1111;
+        println!("ra: {} z: {} rcode: {}", ra, z, rcode);
 
+        let qdcount = u16::from_be_bytes([buf[4], buf[5]]);
+        let ancount = u16::from_be_bytes([buf[6], buf[7]]);
+        let nscount = u16::from_be_bytes([buf[8], buf[9]]);
+        let arcount = u16::from_be_bytes([buf[10], buf[11]]);
+        println!("qdcount: {} ancount: {} nscount: {} arcount: {}"
+                    , qdcount, ancount, nscount, arcount);
 
         //verify that its a query (later)
         //verify that its a standart query
