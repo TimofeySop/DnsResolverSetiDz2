@@ -293,7 +293,12 @@ fn parse_record(source: &[u8], start: usize) -> (ResourceRecord, usize){
 
             position += 16;
         }
-        _ => panic!("Unexpected record type!"),
+        _ => {
+            let len = record_rd_length as usize;
+            let data = source[position..position + len].to_vec();
+            position += len;
+            record_data = RData::Other(data);
+        }
     }
 
     let result = ResourceRecord{
@@ -382,10 +387,10 @@ fn build_message(message: &Message) -> Vec<u8> {
     result.push(flags1);
     result.push(flags2);
 
-    result.extend_from_slice(&message.question.len().to_be_bytes());
-    result.extend_from_slice(&message.answer.len().to_be_bytes());
-    result.extend_from_slice(&message.authority.len().to_be_bytes());
-    result.extend_from_slice(&message.additional.len().to_be_bytes());
+    result.extend_from_slice(&(message.question.len() as u16).to_be_bytes());
+    result.extend_from_slice(&(message.answer.len() as u16).to_be_bytes());
+    result.extend_from_slice(&(message.authority.len() as u16).to_be_bytes());
+    result.extend_from_slice(&(message.additional.len() as u16).to_be_bytes());
 
     for question in &message.question {
         write_domain(&mut result, &question.domain);
