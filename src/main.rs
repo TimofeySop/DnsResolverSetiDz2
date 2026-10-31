@@ -14,6 +14,8 @@ fn main() -> std::io::Result<()> {
 
         let buf = &mut buf[..amt];
 
+
+        //HEADER PARSING START
         let id = u16::from_be_bytes([buf[0], buf[1]]);
 
         let qr = (buf[2] >> 7) & 0b0000000_1;   //query if 0
@@ -35,6 +37,8 @@ fn main() -> std::io::Result<()> {
         let arcount = u16::from_be_bytes([buf[10], buf[11]]);
         println!("qdcount: {} ancount: {} nscount: {} arcount: {}"
                     , qdcount, ancount, nscount, arcount);  
+        //HEADER PARSING END
+        
 
         //verify that its a query (later)
         //verify that its a standart query
@@ -57,8 +61,8 @@ fn main() -> std::io::Result<()> {
 
 
 
-        //write label parser
-        //write label pointer parser. PASS THE WHOLE RECORD
+        //write label parser make a enum for either pointer or a normal label?
+        // ^ write label pointer parser. PASS THE WHOLE RECORD. RECURSIVELY UNWRAP POINTERS
 
         //question parser function goes here
 
@@ -66,6 +70,14 @@ fn main() -> std::io::Result<()> {
         //answer
         //nscount resource record
         //additional data
+
+
+        //understand difference bwtween answer, nameserver field, authority
+        //, additional data completely.
+
+        //write recursive resolver which looks for answer fields.
+        //write multiply thingie, cache answers, maybe support AAAA
+        //DONE
 
 
         socket.send_to(buf, &src)?;
