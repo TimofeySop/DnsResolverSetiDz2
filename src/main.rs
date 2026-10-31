@@ -1,10 +1,12 @@
-//use std::io;
-//use std::thread;
-//use std::time::Duration;
-use std::{io::ErrorKind::QuotaExceeded, net::UdpSocket};
+use std::net::UdpSocket;
+use std::net::Ipv4Addr;
+use std::net::{SocketAddr, SocketAddrV4};
+use rand::RngExt;
 
 fn main() -> std::io::Result<()> {
     {
+        let root = Ipv4Addr::new(192, 58, 128, 30);
+
         let socket = UdpSocket::bind("127.0.0.1:5300")?;
         println!("Listening on 127.0.0.1:5300");
 
@@ -39,7 +41,6 @@ fn main() -> std::io::Result<()> {
                     , qdcount, ancount, nscount, arcount);  
         //HEADER PARSING END
 
-        //let mut next_octet = 12;
         for i in 0..qdcount {
             println!("Query asked a question {}", i);
         }
@@ -55,7 +56,31 @@ fn main() -> std::io::Result<()> {
             print!(".");
         }
 
-        socket.send_to(buf, &src)?;
+        let upstream_socket = UdpSocket::bind("0.0.0.0:0")?;
+
+        let mut request = [0u8; 512];
+        request[..buf.len()].copy_from_slice(buf);
+
+        let new_id: u16 = rand::rng().random();
+        request[0] = (new_id >> 8) as u8;
+        request[1] = new_id as u8;
+
+        request[2] &= !0b00000001;
+
+        let root_addr = SocketAddr::V4(SocketAddrV4::new(root, 53));
+        upstream_socket.send_to(&request[..buf.len()], root_addr)?;
+
+        let mut response = [0u8; 1024];
+        let (amt1, src1) = upstream_socket.recv_from(&mut response)?;
+        let response = &mut response[..amt1];
+        if response[0] != request[0] || response[1] != request[1]{
+            panic!("request id doesnt match response id!");
+        }
+
+        response[0] = buf[0];
+        response[1] = buf[1];
+
+        socket.send_to(response, &src)?;
     }
     Ok(())
 }
@@ -125,7 +150,6 @@ fn parse_label(source: &[u8], size_byte_start: usize) -> (Vec<u8>, usize) { //ne
 }
 
 fn parse_pointer(source: &[u8], size_byte_start: usize) -> (Vec<Vec<u8>>, usize) { //next index + labels
-    //let octet_index = usize::from(source[size_byte_start] & 0b00_111111);
     let octet_index = usize::from(
         u16::from_be_bytes([source[size_byte_start] & 0b00_111111, 
                             source[size_byte_start + 1]])
@@ -151,7 +175,6 @@ fn parse_additional(source: &[u8], arcount: u16){
 
 }
 
-//big or small endian?
 fn get_bits_slice(source: u8, start: i32, end: i32) -> u8 {
     if !(0 <= start && start < end && end <= 7) {
         panic!("invalid bit positions!")
@@ -164,48 +187,3 @@ fn get_bits_slice(source: u8, start: i32, end: i32) -> u8 {
 
     (source.clone() & mask) >> (7 - end)
 }
-
-//verify that its a query (later)
-        //verify that its a standart query
-        //aa, tc no check for query
-        // rd send on my own later
-        //ignore z
-        //panic if rcode is not 0, make a mask later
-        // if qdcount != 1 send rcode 4(not implemented) in rcode
-        // ic cant find, send rcode 3(name error)
-
-        //ancount ignore for query, check for loop
-        //nscount check on the last step when recieved AA answer
-        //arcount search for actual ips
-        //question octet groups is stuff inbetween . in qname
-        //qtype????????????????????????????????????????????????????????
-        //qclass only take IN
-        //check out resource record and message compression
-
-        //where labels are used: name in resource record, 
-
-
-
-        //write label parser make a enum for either pointer or a normal label?
-        // ^ write label pointer parser. PASS THE WHOLE RECORD. RECURSIVELY UNWRAP POINTERS
-
-        //question parser function goes here
-
-        //rr parsing goes here
-        //answer
-        //nscount resource record
-        //additional data
-
-
-        //understand difference bwtween answer, nameserver field, authority
-        //, additional data completely.
-        //A: nameserver is authority section (referral)
-        //qdcount is question
-        //ancount is final answer
-        //arcount is shit to look up 
-        //authority contatins domain names
-        //additional section writes what it is
-
-        //write recursive resolver which looks for answer fields.
-        //write multiply thingie, cache answers, maybe support AAAA
-        //DONE
